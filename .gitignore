@@ -1,0 +1,5 @@
+# Ignore config file
+iproute.conf
+
+# Ignore binary
+iproute
