@@ -1,6 +1,5 @@
 # Variables
 APP_NAME = iproute
-BUILD_DIR = bin
 
 # Default target
 all: build
