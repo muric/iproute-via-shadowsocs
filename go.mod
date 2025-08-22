@@ -1,6 +1,6 @@
 module iproute
 
-go 1.22.2
+go 1.22
 
 require github.com/vishvananda/netlink v1.3.1
 
