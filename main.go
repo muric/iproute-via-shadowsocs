@@ -85,7 +85,7 @@ func addRoute(destination, gateway, ifaceName string) error {
 func main() {
     config, err := readConfig("iproute.conf")
     if err != nil {
-        log.Println("Error reading configuration: %v\n", err)
+        log.Printf("Error reading configuration: %v\n", err)
         return
     }
 
@@ -105,7 +105,7 @@ func main() {
     })
 
     if err != nil {
-        log.Println("Error reading folder %s: %v\n", dir, err)
+        log.Printf("Error reading folder %s: %v\n", dir, err)
         return
     }
 
@@ -113,13 +113,13 @@ func main() {
         log.Println("working on :" + fileName )
         data, err := ioutil.ReadFile(filepath.Join(dir, fileName))
         if err != nil {
-            log.Println("Error reading file: %v\n", err)
+            log.Printf("Error reading file: %v\n", err)
             return
         }
 
         var destinations []string
         if err := json.Unmarshal(data, &destinations); err != nil {
-            log.Println("Error parsing JSON: %v\n", err)
+            log.Printf("Error parsing JSON: %v\n", err)
             return
         }
 
