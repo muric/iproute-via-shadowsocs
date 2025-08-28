@@ -110,7 +110,7 @@ func main() {
     }
 
     for _, fileName := range jsonFiles {
-        log.Println("working on :" + fileName )
+        log.Println("working on: " + fileName )
         data, err := ioutil.ReadFile(filepath.Join(dir, fileName))
         if err != nil {
             log.Printf("Error reading file: %v\n", err)
