@@ -1,0 +1,10 @@
+[Unit]
+Description=route shadow
+After=multi-user.target
+[Service]
+Type=oneshot
+WorkingDirectory=~/iproute-via-shadowsocs
+#ExecStartPre="~/shadow_socks/add_tun.sh"
+ExecStart=iproute
+[Install]
+WantedBy=multi-user.target
