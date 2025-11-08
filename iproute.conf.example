@@ -1,2 +1,5 @@
 gateway=10.0.0.1
 interface=tun2
+
+default_gw=192.168.1.1
+default_interface=eth0
