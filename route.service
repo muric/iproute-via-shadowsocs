@@ -5,6 +5,6 @@ After=multi-user.target
 Type=oneshot
 WorkingDirectory=~/iproute-via-shadowsocs
 #ExecStartPre="~/shadow_socks/add_tun.sh"
-ExecStart=iproute
+ExecStart=srtunectl
 [Install]
 WantedBy=multi-user.target

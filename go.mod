@@ -1,4 +1,4 @@
-module iproute
+module srtunectl
 
 go 1.20
 

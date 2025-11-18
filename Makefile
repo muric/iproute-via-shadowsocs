@@ -1,5 +1,5 @@
 # Variables
-APP_NAME = iproute
+APP_NAME = srtunectl
 
 # Default target
 all: build
