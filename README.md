@@ -57,7 +57,8 @@ Your configuration will typically include:
 - List of networks to route
 - Tun interface name (e.g., `tun0`)
 - Gateway address
-- Additional route flags if required
+- default gateway address to set default route via them
+- default interface name
 
 Additionally:
 - JSON files in the `data` folder will be parsed and added as routes through the tun device.
