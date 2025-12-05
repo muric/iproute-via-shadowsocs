@@ -3,3 +3,4 @@ iproute.conf
 
 # Ignore binary
 iproute
+srtunectl
