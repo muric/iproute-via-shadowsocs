@@ -11,6 +11,7 @@ import (
     "path/filepath"
     "strings"
     "sync"
+    "strconv"
 
     "github.com/vishvananda/netlink"
 )
@@ -20,6 +21,7 @@ type Config struct {
     Interface        string
     DefaultGateway   string
     DefaultInterface string
+    GoroutineCount   int
 }
 
 func readConfig(filename string) (Config, error) {
@@ -51,6 +53,11 @@ func readConfig(filename string) (Config, error) {
             config.DefaultGateway = value
         case "default_interface":
             config.DefaultInterface = value
+	case "goroutine_count":
+	    config.GoroutineCount, err = strconv.Atoi(value)
+	    if err != nil {
+        	panic(err)
+		}
         }
     }
 
@@ -89,7 +96,7 @@ func addRoute(destination, gateway, ifaceName string) error {
     return nil
 }
 
-func addRoutesFromDir(dir, gateway, iface string) error {
+func addRoutesFromDir(dir, gateway, iface string, gouroutinecount int) error {
     if _, err := os.Stat(dir); os.IsNotExist(err) {
         log.Printf("Directory %s does not exist — skipping\n", dir)
         return nil
@@ -130,7 +137,7 @@ func addRoutesFromDir(dir, gateway, iface string) error {
         }
 
         var wg sync.WaitGroup
-        sem := make(chan struct{}, 100)
+        sem := make(chan struct{}, gouroutinecount)
 
         for _, dest := range destinations {
             wg.Add(1)
@@ -160,14 +167,14 @@ func main() {
 
     if config.Interface != "" && config.Gateway != "" {
         log.Println("Adding routes for interface:", config.Interface)
-        if err := addRoutesFromDir(mainDir, config.Gateway, config.Interface); err != nil {
+        if err := addRoutesFromDir(mainDir, config.Gateway, config.Interface, config.GoroutineCount); err != nil {
             log.Printf("\033[31mError adding routes: %v\033[0m\n", err)
         }
     }
 
     if config.DefaultInterface != "" && config.DefaultGateway != "" {
         log.Println("Adding routes for default interface:", config.DefaultInterface)
-        if err := addRoutesFromDir(defaultDir, config.DefaultGateway, config.DefaultInterface); err != nil {
+        if err := addRoutesFromDir(defaultDir, config.DefaultGateway, config.DefaultInterface, config.GoroutineCount); err != nil {
             log.Printf("\033[31mError adding default routes: %v\033[0m\n", err)
         }
     }
