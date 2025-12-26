@@ -141,30 +141,43 @@ func (s *Stats) PrintStats() {
     invalidArgument := atomic.LoadInt64(&s.InvalidArgument)
     noRouteToHost := atomic.LoadInt64(&s.NoRouteToHost)
     unknownError := atomic.LoadInt64(&s.UnknownError)
+    totalErrors := alreadyExist + networkUnreachable + operationNotPermit + invalidArgument + noRouteToHost + unknownError
 
-    log.Println("\n========== Statistics ==========")
-    log.Printf("Successfully added: %d\n", success)
-    log.Printf("Already existed (skipped): %d\n", alreadyExist)
+    const termWidth = 80
+    center := func(s string) string {
+        padding := (termWidth - len(s)) / 2
+        if padding < 0 {
+            padding = 0
+        }
+        return strings.Repeat(" ", padding) + s
+    }
+
+    var sb strings.Builder
+    sb.WriteString("\n")
+    sb.WriteString(center("========== Statistics ==========") + "\n")
+    sb.WriteString(center(fmt.Sprintf("Successfully added: %d", success)) + "\n")
+    sb.WriteString(center(fmt.Sprintf("Already existed (skipped): %d", alreadyExist)) + "\n")
 
     if networkUnreachable > 0 {
-        log.Printf("Network unreachable: %d\n", networkUnreachable)
+        sb.WriteString(center(fmt.Sprintf("Network unreachable: %d", networkUnreachable)) + "\n")
     }
     if operationNotPermit > 0 {
-        log.Printf("Operation not permitted: %d\n", operationNotPermit)
+        sb.WriteString(center(fmt.Sprintf("Operation not permitted: %d", operationNotPermit)) + "\n")
     }
     if invalidArgument > 0 {
-        log.Printf("Invalid argument: %d\n", invalidArgument)
+        sb.WriteString(center(fmt.Sprintf("Invalid argument: %d", invalidArgument)) + "\n")
     }
     if noRouteToHost > 0 {
-        log.Printf("No route to host: %d\n", noRouteToHost)
+        sb.WriteString(center(fmt.Sprintf("No route to host: %d", noRouteToHost)) + "\n")
     }
     if unknownError > 0 {
-        log.Printf("Unknown errors: %d\n", unknownError)
+        sb.WriteString(center(fmt.Sprintf("Unknown errors: %d", unknownError)) + "\n")
     }
 
-    totalErrors := alreadyExist + networkUnreachable + operationNotPermit + invalidArgument + noRouteToHost + unknownError
-    log.Printf("Total processed: %d\n", success+totalErrors)
-    log.Println("================================")
+    sb.WriteString(center(fmt.Sprintf("Total processed: %d", success+totalErrors)) + "\n")
+    sb.WriteString(center("================================"))
+
+    log.Print(sb.String())
 }
 
 func (s *Stats) Close() {
