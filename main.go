@@ -141,41 +141,31 @@ func (s *Stats) PrintStats() {
     invalidArgument := atomic.LoadInt64(&s.InvalidArgument)
     noRouteToHost := atomic.LoadInt64(&s.NoRouteToHost)
     unknownError := atomic.LoadInt64(&s.UnknownError)
-    totalErrors := alreadyExist + networkUnreachable + operationNotPermit + invalidArgument + noRouteToHost + unknownError
-
-    const termWidth = 80
-    center := func(s string) string {
-        padding := (termWidth - len(s)) / 2
-        if padding < 0 {
-            padding = 0
-        }
-        return strings.Repeat(" ", padding) + s
-    }
 
     var sb strings.Builder
-    sb.WriteString("\n")
-    sb.WriteString(center("========== Statistics ==========") + "\n")
-    sb.WriteString(center(fmt.Sprintf("Successfully added: %d", success)) + "\n")
-    sb.WriteString(center(fmt.Sprintf("Already existed (skipped): %d", alreadyExist)) + "\n")
+    sb.WriteString("\n========== Statistics ==========\n")
+    fmt.Fprintf(&sb, "Successfully added: %d\n", success)
+    fmt.Fprintf(&sb, "Already existed (skipped): %d\n", alreadyExist)
 
     if networkUnreachable > 0 {
-        sb.WriteString(center(fmt.Sprintf("Network unreachable: %d", networkUnreachable)) + "\n")
+        fmt.Fprintf(&sb, "Network unreachable: %d\n", networkUnreachable)
     }
     if operationNotPermit > 0 {
-        sb.WriteString(center(fmt.Sprintf("Operation not permitted: %d", operationNotPermit)) + "\n")
+        fmt.Fprintf(&sb, "Operation not permitted: %d\n", operationNotPermit)
     }
     if invalidArgument > 0 {
-        sb.WriteString(center(fmt.Sprintf("Invalid argument: %d", invalidArgument)) + "\n")
+        fmt.Fprintf(&sb, "Invalid argument: %d\n", invalidArgument)
     }
     if noRouteToHost > 0 {
-        sb.WriteString(center(fmt.Sprintf("No route to host: %d", noRouteToHost)) + "\n")
+        fmt.Fprintf(&sb, "No route to host: %d\n", noRouteToHost)
     }
     if unknownError > 0 {
-        sb.WriteString(center(fmt.Sprintf("Unknown errors: %d", unknownError)) + "\n")
+        fmt.Fprintf(&sb, "Unknown errors: %d\n", unknownError)
     }
 
-    sb.WriteString(center(fmt.Sprintf("Total processed: %d", success+totalErrors)) + "\n")
-    sb.WriteString(center("================================"))
+    totalErrors := alreadyExist + networkUnreachable + operationNotPermit + invalidArgument + noRouteToHost + unknownError
+    fmt.Fprintf(&sb, "Total processed: %d\n", success+totalErrors)
+    sb.WriteString("================================")
 
     log.Print(sb.String())
 }
