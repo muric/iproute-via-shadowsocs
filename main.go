@@ -96,10 +96,16 @@ func (s *Stats) duplicatesWriter() {
 
 		writer := bufio.NewWriter(s.duplicatesFile)
 		for _, dup := range buffer {
-			writer.WriteString(dup)
-			writer.WriteByte('\n')
+			if _, err := writer.WriteString(dup); err != nil {
+				log.Printf("Error writing duplicate: %v", err)
+			}
+			if err := writer.WriteByte('\n'); err != nil {
+				log.Printf("Error writing newline: %v", err)
+			}
 		}
-		writer.Flush()
+		if err := writer.Flush(); err != nil {
+			log.Printf("Error flushing duplicates file: %v", err)
+		}
 		buffer = buffer[:0]
 	}
 
@@ -113,8 +119,10 @@ func (s *Stats) duplicatesWriter() {
 	flush()
 
 	if s.duplicatesFile != nil {
-		s.duplicatesFile.Close()
-		log.Printf("Duplicates written to: %s\n", s.filename)
+		if err := s.duplicatesFile.Close(); err != nil {
+			log.Printf("Error closing duplicates file: %v", err)
+		}
+		log.Printf("Duplicates written to: %s", s.filename)
 	}
 
 	close(s.writerDone)
@@ -218,7 +226,11 @@ func readConfig(filename string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			log.Printf("Error closing config file: %v", cerr)
+		}
+	}()
 
 	config := Config{
 		GoroutineCount: defaultGoroutineCount,
@@ -265,11 +277,17 @@ func readConfig(filename string) (Config, error) {
 	return config, nil
 }
 
-func creatTunInterface(ifName string) error {
+func createTunInterface(ifName string) error {
 	file, err := os.OpenFile("/dev/net/tun", os.O_RDWR, 0)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			log.Printf("Error closing /dev/net/tun: %v", cerr)
+		}
+	}()
+
 	ifr := ifreq{
 		ifrFlags: IFF_TUN | IFF_NO_PI,
 	}
@@ -283,16 +301,16 @@ func creatTunInterface(ifName string) error {
 			file.Close()
 			return errno
 		}
-	}
-	_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), uintptr(TUNSETPERSIST), 1)
-	if errno != 0 {
-		file.Close()
 		return errno
 	}
 
-	log.Printf("Interface %s is now persistent\n", ifName)
+	_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), uintptr(TUNSETPERSIST), 1)
+	if errno != 0 {
+		return errno
+	}
 
-	return file.Close()
+	log.Printf("Interface %s is now persistent", ifName)
+	return nil
 }
 
 func setIpTunInterface(ifName, gateway string) error {
@@ -323,13 +341,16 @@ func setIpTunInterface(ifName, gateway string) error {
 }
 
 func addRoute(destination string, gwIP net.IP, ifaceIndex int) error {
-	ip, ipNet, err := net.ParseCIDR(destination)
-	if err != nil {
-		ip = net.ParseIP(destination)
+	var ipNet *net.IPNet
+
+	if _, parsedNet, err := net.ParseCIDR(destination); err != nil {
+		ip := net.ParseIP(destination)
 		if ip == nil {
 			return fmt.Errorf("error parsing destination %s: %w", destination, err)
 		}
 		ipNet = &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)}
+	} else {
+		ipNet = parsedNet
 	}
 
 	route := &netlink.Route{
@@ -439,7 +460,7 @@ func main() {
 	}
 	// create tun interface from config
 	log.Println("create tun interface from config")
-	err = creatTunInterface(config.Interface)
+	err = createTunInterface(config.Interface)
 	if err != nil {
 		log.Fatalf("System error ioctl: %v", err)
 	}
