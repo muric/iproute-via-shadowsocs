@@ -297,9 +297,6 @@ func createTunInterface(ifName string) error {
 	if errno != 0 {
 		if errno == syscall.EEXIST || errno == syscall.EBUSY {
 			fmt.Println("Interface already exists")
-		} else {
-			file.Close()
-			return errno
 		}
 		return errno
 	}
