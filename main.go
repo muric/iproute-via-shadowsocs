@@ -270,25 +270,29 @@ func creatTunInterface(ifName string) error {
 	if err != nil {
 		return err
 	}
-
 	ifr := ifreq{
-		ifrName:  [16]byte{},
 		ifrFlags: IFF_TUN | IFF_NO_PI,
 	}
 	copy(ifr.ifrName[:], ifName)
 
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), TUNSETIFF, uintptr(unsafe.Pointer(&ifr)))
-	if errno == syscall.EEXIST {
-		fmt.Println("Interface exist")
-	} else {
-		return err
-	}
-	_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), TUNSETPERSIST, 1)
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), uintptr(TUNSETIFF), uintptr(unsafe.Pointer(&ifr)))
 	if errno != 0 {
+		if errno == syscall.EEXIST {
+			fmt.Println("Interface already exists")
+		} else {
+			file.Close()
+			return errno
+		}
+	}
+	_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), uintptr(TUNSETPERSIST), 1)
+	if errno != 0 {
+		file.Close()
 		return errno
 	}
 
-	return nil
+	log.Printf("Interface %s is now persistent\n", ifName)
+
+	return file.Close()
 }
 
 func setIpTunInterface(ifName, gateway string) error {
