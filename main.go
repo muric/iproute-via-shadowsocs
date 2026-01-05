@@ -339,18 +339,15 @@ func setIpTunInterface(ifName, gateway string) error {
 }
 
 func addRoute(destination string, gwIP net.IP, ifaceIndex int) error {
-	var ip net.IP
 	var ipNet *net.IPNet
 
-	parsedIP, parsedNet, err := net.ParseCIDR(destination)
-	if err != nil {
-		ip = net.ParseIP(destination)
+	if _, parsedNet, err := net.ParseCIDR(destination); err != nil {
+		ip := net.ParseIP(destination)
 		if ip == nil {
 			return fmt.Errorf("error parsing destination %s: %w", destination, err)
 		}
 		ipNet = &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)}
 	} else {
-		ip = parsedIP
 		ipNet = parsedNet
 	}
 
