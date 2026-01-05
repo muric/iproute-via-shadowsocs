@@ -1,10 +1,11 @@
 [Unit]
 Description=route shadow
 After=multi-user.target
+
 [Service]
 Type=oneshot
-WorkingDirectory=~/iproute-via-shadowsocs
-#ExecStartPre="~/shadow_socks/add_tun.sh"
-ExecStart=srtunectl
+WorkingDirectory=@IPROUTE_GIT_DIR@
+ExecStart=/usr/bin/srtunectl
+
 [Install]
 WantedBy=multi-user.target

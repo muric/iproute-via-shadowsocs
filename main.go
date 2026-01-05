@@ -1,403 +1,483 @@
 package main
 
 import (
-    "bufio"
-    "encoding/json"
-    "fmt"
-    "log"
-    "net"
-    "os"
-    "os/signal"
-    "path/filepath"
-    "strconv"
-    "strings"
-    "sync"
-    "sync/atomic"
-    "syscall"
-    "time"
+	"bufio"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
+	"unsafe"
 
-    "github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink"
 )
 
 const (
-    duplicatesFlushThreshold = 10000
-    duplicatesChanBuffer     = 50000
-    defaultGoroutineCount    = 100
-    defaultDebug             = false
-    mainRouteDir             = "data"
-    defaultRouteDir          = "default_route"
-    duplicatesFilePrefix     = "/tmp/route_duplicates_"
+	TUNSETIFF                = 0x400454ca
+	IFF_TUN                  = 0x0001
+	IFF_NO_PI                = 0x1000
+	TUNSETPERSIST            = 0x400454cb
+	duplicatesFlushThreshold = 10000
+	duplicatesChanBuffer     = 50000
+	defaultGoroutineCount    = 100
+	defaultDebug             = false
+	mainRouteDir             = "data"
+	defaultRouteDir          = "default_route"
+	duplicatesFilePrefix     = "/tmp/route_duplicates_"
 )
 
+type ifreq struct {
+	ifrName  [16]byte
+	ifrFlags uint16
+}
+
 type Config struct {
-    Gateway          string
-    Interface        string
-    DefaultGateway   string
-    DefaultInterface string
-    GoroutineCount   int
-    Debug            bool
+	Gateway          string
+	Interface        string
+	DefaultGateway   string
+	DefaultInterface string
+	GoroutineCount   int
+	Debug            bool
 }
 
 type Stats struct {
-    Success            int64
-    AlreadyExist       int64
-    NetworkUnreachable int64
-    OperationNotPermit int64
-    InvalidArgument    int64
-    NoRouteToHost      int64
-    UnknownError       int64
+	Success            int64
+	AlreadyExist       int64
+	NetworkUnreachable int64
+	OperationNotPermit int64
+	InvalidArgument    int64
+	NoRouteToHost      int64
+	UnknownError       int64
 
-    dupChan        chan string
-    writerDone     chan struct{}
-    duplicatesFile *os.File
-    filename       string
-    closeOnce      sync.Once
+	dupChan        chan string
+	writerDone     chan struct{}
+	duplicatesFile *os.File
+	filename       string
+	closeOnce      sync.Once
 }
 
 func NewStats() *Stats {
-    filename := fmt.Sprintf("%s%s.log", duplicatesFilePrefix, time.Now().Format("2006-01-02_15-04-05"))
-    s := &Stats{
-        dupChan:    make(chan string, duplicatesChanBuffer),
-        writerDone: make(chan struct{}),
-        filename:   filename,
-    }
-    go s.duplicatesWriter()
-    return s
+	filename := fmt.Sprintf("%s%s.log", duplicatesFilePrefix, time.Now().Format("2006-01-02_15-04-05"))
+	s := &Stats{
+		dupChan:    make(chan string, duplicatesChanBuffer),
+		writerDone: make(chan struct{}),
+		filename:   filename,
+	}
+	go s.duplicatesWriter()
+	return s
 }
 
 func (s *Stats) duplicatesWriter() {
-    buffer := make([]string, 0, duplicatesFlushThreshold)
+	buffer := make([]string, 0, duplicatesFlushThreshold)
 
-    flush := func() {
-        if len(buffer) == 0 {
-            return
-        }
+	flush := func() {
+		if len(buffer) == 0 {
+			return
+		}
 
-        if s.duplicatesFile == nil {
-            file, err := os.Create(s.filename)
-            if err != nil {
-                log.Printf("Error creating duplicates file: %v\n", err)
-                buffer = buffer[:0]
-                return
-            }
-            s.duplicatesFile = file
-        }
+		if s.duplicatesFile == nil {
+			file, err := os.Create(s.filename)
+			if err != nil {
+				log.Printf("Error creating duplicates file: %v\n", err)
+				buffer = buffer[:0]
+				return
+			}
+			s.duplicatesFile = file
+		}
 
-        writer := bufio.NewWriter(s.duplicatesFile)
-        for _, dup := range buffer {
-            writer.WriteString(dup)
-            writer.WriteByte('\n')
-        }
-        writer.Flush()
-        buffer = buffer[:0]
-    }
+		writer := bufio.NewWriter(s.duplicatesFile)
+		for _, dup := range buffer {
+			writer.WriteString(dup)
+			writer.WriteByte('\n')
+		}
+		writer.Flush()
+		buffer = buffer[:0]
+	}
 
-    for route := range s.dupChan {
-        buffer = append(buffer, route)
-        if len(buffer) >= duplicatesFlushThreshold {
-            flush()
-        }
-    }
+	for route := range s.dupChan {
+		buffer = append(buffer, route)
+		if len(buffer) >= duplicatesFlushThreshold {
+			flush()
+		}
+	}
 
-    flush()
+	flush()
 
-    if s.duplicatesFile != nil {
-        s.duplicatesFile.Close()
-        log.Printf("Duplicates written to: %s\n", s.filename)
-    }
+	if s.duplicatesFile != nil {
+		s.duplicatesFile.Close()
+		log.Printf("Duplicates written to: %s\n", s.filename)
+	}
 
-    close(s.writerDone)
+	close(s.writerDone)
 }
 
 func (s *Stats) AddSuccess() {
-    atomic.AddInt64(&s.Success, 1)
+	atomic.AddInt64(&s.Success, 1)
 }
 
 func (s *Stats) AddAlreadyExist(route string) {
-    atomic.AddInt64(&s.AlreadyExist, 1)
-    s.dupChan <- route
+	atomic.AddInt64(&s.AlreadyExist, 1)
+	s.dupChan <- route
 }
 
 func (s *Stats) AddError(errType string) {
-    switch errType {
-    case "network_unreachable":
-        atomic.AddInt64(&s.NetworkUnreachable, 1)
-    case "operation_not_permitted":
-        atomic.AddInt64(&s.OperationNotPermit, 1)
-    case "invalid_argument":
-        atomic.AddInt64(&s.InvalidArgument, 1)
-    case "no_route_to_host":
-        atomic.AddInt64(&s.NoRouteToHost, 1)
-    case "unknown":
-        atomic.AddInt64(&s.UnknownError, 1)
-    }
+	switch errType {
+	case "network_unreachable":
+		atomic.AddInt64(&s.NetworkUnreachable, 1)
+	case "operation_not_permitted":
+		atomic.AddInt64(&s.OperationNotPermit, 1)
+	case "invalid_argument":
+		atomic.AddInt64(&s.InvalidArgument, 1)
+	case "no_route_to_host":
+		atomic.AddInt64(&s.NoRouteToHost, 1)
+	case "unknown":
+		atomic.AddInt64(&s.UnknownError, 1)
+	}
 }
 
 func (s *Stats) PrintStats() {
-    success := atomic.LoadInt64(&s.Success)
-    alreadyExist := atomic.LoadInt64(&s.AlreadyExist)
-    networkUnreachable := atomic.LoadInt64(&s.NetworkUnreachable)
-    operationNotPermit := atomic.LoadInt64(&s.OperationNotPermit)
-    invalidArgument := atomic.LoadInt64(&s.InvalidArgument)
-    noRouteToHost := atomic.LoadInt64(&s.NoRouteToHost)
-    unknownError := atomic.LoadInt64(&s.UnknownError)
+	success := atomic.LoadInt64(&s.Success)
+	alreadyExist := atomic.LoadInt64(&s.AlreadyExist)
+	networkUnreachable := atomic.LoadInt64(&s.NetworkUnreachable)
+	operationNotPermit := atomic.LoadInt64(&s.OperationNotPermit)
+	invalidArgument := atomic.LoadInt64(&s.InvalidArgument)
+	noRouteToHost := atomic.LoadInt64(&s.NoRouteToHost)
+	unknownError := atomic.LoadInt64(&s.UnknownError)
 
-    var sb strings.Builder
-    sb.WriteString("\n========== Statistics ==========\n")
-    fmt.Fprintf(&sb, "Successfully added: %d\n", success)
-    fmt.Fprintf(&sb, "Already existed (skipped): %d\n", alreadyExist)
+	var sb strings.Builder
+	sb.WriteString("\n========== Statistics ==========\n")
+	fmt.Fprintf(&sb, "Successfully added: %d\n", success)
+	fmt.Fprintf(&sb, "Already existed (skipped): %d\n", alreadyExist)
 
-    if networkUnreachable > 0 {
-        fmt.Fprintf(&sb, "Network unreachable: %d\n", networkUnreachable)
-    }
-    if operationNotPermit > 0 {
-        fmt.Fprintf(&sb, "Operation not permitted: %d\n", operationNotPermit)
-    }
-    if invalidArgument > 0 {
-        fmt.Fprintf(&sb, "Invalid argument: %d\n", invalidArgument)
-    }
-    if noRouteToHost > 0 {
-        fmt.Fprintf(&sb, "No route to host: %d\n", noRouteToHost)
-    }
-    if unknownError > 0 {
-        fmt.Fprintf(&sb, "Unknown errors: %d\n", unknownError)
-    }
+	if networkUnreachable > 0 {
+		fmt.Fprintf(&sb, "Network unreachable: %d\n", networkUnreachable)
+	}
+	if operationNotPermit > 0 {
+		fmt.Fprintf(&sb, "Operation not permitted: %d\n", operationNotPermit)
+	}
+	if invalidArgument > 0 {
+		fmt.Fprintf(&sb, "Invalid argument: %d\n", invalidArgument)
+	}
+	if noRouteToHost > 0 {
+		fmt.Fprintf(&sb, "No route to host: %d\n", noRouteToHost)
+	}
+	if unknownError > 0 {
+		fmt.Fprintf(&sb, "Unknown errors: %d\n", unknownError)
+	}
 
-    totalErrors := alreadyExist + networkUnreachable + operationNotPermit + invalidArgument + noRouteToHost + unknownError
-    fmt.Fprintf(&sb, "Total processed: %d\n", success+totalErrors)
-    sb.WriteString("================================")
+	totalErrors := alreadyExist + networkUnreachable + operationNotPermit + invalidArgument + noRouteToHost + unknownError
+	fmt.Fprintf(&sb, "Total processed: %d\n", success+totalErrors)
+	sb.WriteString("================================")
 
-    log.Print(sb.String())
+	log.Print(sb.String())
 }
 
 func (s *Stats) Close() {
-    s.closeOnce.Do(func() {
-        close(s.dupChan)
-        <-s.writerDone
-    })
+	s.closeOnce.Do(func() {
+		close(s.dupChan)
+		<-s.writerDone
+	})
 }
 
 func classifyError(err error) string {
-    errStr := err.Error()
+	errStr := err.Error()
 
-    if strings.Contains(errStr, "file exists") {
-        return "file_exists"
-    }
-    if strings.Contains(errStr, "network is unreachable") {
-        return "network_unreachable"
-    }
-    if strings.Contains(errStr, "no such device") {
-        return "no_such_device"
-    }
-    if strings.Contains(errStr, "operation not permitted") {
-        return "operation_not_permitted"
-    }
-    if strings.Contains(errStr, "invalid argument") {
-        return "invalid_argument"
-    }
-    if strings.Contains(errStr, "no route to host") {
-        return "no_route_to_host"
-    }
+	if strings.Contains(errStr, "file exists") {
+		return "file_exists"
+	}
+	if strings.Contains(errStr, "network is unreachable") {
+		return "network_unreachable"
+	}
+	if strings.Contains(errStr, "no such device") {
+		return "no_such_device"
+	}
+	if strings.Contains(errStr, "operation not permitted") {
+		return "operation_not_permitted"
+	}
+	if strings.Contains(errStr, "invalid argument") {
+		return "invalid_argument"
+	}
+	if strings.Contains(errStr, "no route to host") {
+		return "no_route_to_host"
+	}
 
-    return "unknown"
+	return "unknown"
 }
 
 func readConfig(filename string) (Config, error) {
-    file, err := os.Open(filename)
-    if err != nil {
-        return Config{}, err
-    }
-    defer file.Close()
+	file, err := os.Open(filename)
+	if err != nil {
+		return Config{}, err
+	}
+	defer file.Close()
 
-    config := Config{
-        GoroutineCount: defaultGoroutineCount,
-        Debug:          defaultDebug,
-    }
-    scanner := bufio.NewScanner(file)
+	config := Config{
+		GoroutineCount: defaultGoroutineCount,
+		Debug:          defaultDebug,
+	}
+	scanner := bufio.NewScanner(file)
 
-    for scanner.Scan() {
-        line := scanner.Text()
-        parts := strings.SplitN(line, "=", 2)
-        if len(parts) != 2 {
-            continue
-        }
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
 
-        key := strings.TrimSpace(parts[0])
-        value := strings.TrimSpace(parts[1])
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
 
-        switch key {
-        case "gateway":
-            config.Gateway = value
-        case "interface":
-            config.Interface = value
-        case "default_gw":
-            config.DefaultGateway = value
-        case "default_interface":
-            config.DefaultInterface = value
-        case "goroutine_count":
-            config.GoroutineCount, err = strconv.Atoi(value)
-            if err != nil {
-                return Config{}, fmt.Errorf("invalid goroutine_count value '%s': %w", value, err)
-            }
-        case "debug":
-            config.Debug, err = strconv.ParseBool(value)
-            if err != nil {
-                return Config{}, fmt.Errorf("invalid debug value '%s': %w", value, err)
-            }
-        }
-    }
+		switch key {
+		case "gateway":
+			config.Gateway = value
+		case "interface":
+			config.Interface = value
+		case "default_gw":
+			config.DefaultGateway = value
+		case "default_interface":
+			config.DefaultInterface = value
+		case "goroutine_count":
+			config.GoroutineCount, err = strconv.Atoi(value)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid goroutine_count value '%s': %w", value, err)
+			}
+		case "debug":
+			config.Debug, err = strconv.ParseBool(value)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid debug value '%s': %w", value, err)
+			}
+		}
+	}
 
-    if err := scanner.Err(); err != nil {
-        return Config{}, err
-    }
+	if err := scanner.Err(); err != nil {
+		return Config{}, err
+	}
 
-    return config, nil
+	return config, nil
+}
+
+func creatTunInterface(ifName string) error {
+	file, err := os.OpenFile("/dev/net/tun", os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	ifr := ifreq{
+		ifrFlags: IFF_TUN | IFF_NO_PI,
+	}
+	copy(ifr.ifrName[:], ifName)
+
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), uintptr(TUNSETIFF), uintptr(unsafe.Pointer(&ifr)))
+	if errno != 0 {
+		if errno == syscall.EEXIST {
+			fmt.Println("Interface already exists")
+		} else {
+			file.Close()
+			return errno
+		}
+	}
+	_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), uintptr(TUNSETPERSIST), 1)
+	if errno != 0 {
+		file.Close()
+		return errno
+	}
+
+	log.Printf("Interface %s is now persistent\n", ifName)
+
+	return file.Close()
+}
+
+func setIpTunInterface(ifName, gateway string) error {
+	link, err := netlink.LinkByName(ifName)
+	if err != nil {
+		log.Fatalf("interface not found: %v", err)
+	}
+
+	addr, err := netlink.ParseAddr(gateway + "/24")
+	if err != nil {
+		log.Fatalf("Failed to parse ip: %v", err)
+	}
+
+	err = netlink.AddrAdd(link, addr)
+	if err != nil {
+		if errors.Is(err, syscall.EEXIST) {
+			log.Printf("IP %s are allready setuped on interface %s ", addr.IP, link.Attrs().Name)
+		} else {
+			log.Fatalf("failed to set up ip: %v", err)
+		}
+	}
+
+	err = netlink.LinkSetUp(link)
+	if err != nil {
+		log.Fatalf("Failed to up interface: %v", err)
+	}
+	return err
 }
 
 func addRoute(destination string, gwIP net.IP, ifaceIndex int) error {
-    ip, ipNet, err := net.ParseCIDR(destination)
-    if err != nil {
-        ip = net.ParseIP(destination)
-        if ip == nil {
-            return fmt.Errorf("error parsing destination %s: %w", destination, err)
-        }
-        ipNet = &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)}
-    }
+	ip, ipNet, err := net.ParseCIDR(destination)
+	if err != nil {
+		ip = net.ParseIP(destination)
+		if ip == nil {
+			return fmt.Errorf("error parsing destination %s: %w", destination, err)
+		}
+		ipNet = &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)}
+	}
 
-    route := &netlink.Route{
-        Dst:       ipNet,
-        Gw:        gwIP,
-        LinkIndex: ifaceIndex,
-    }
+	route := &netlink.Route{
+		Dst:       ipNet,
+		Gw:        gwIP,
+		LinkIndex: ifaceIndex,
+	}
 
-    if err := netlink.RouteAdd(route); err != nil {
-        return fmt.Errorf("error adding route %s: %w", destination, err)
-    }
+	if err := netlink.RouteAdd(route); err != nil {
+		return fmt.Errorf("error adding route %s: %w", destination, err)
+	}
 
-    return nil
+	return nil
 }
 
 func addRoutesFromDir(dir, gateway, ifaceName string, goroutineCount int, debug bool, stats *Stats) error {
-    if _, err := os.Stat(dir); os.IsNotExist(err) {
-        log.Printf("Directory %s does not exist — skipping\n", dir)
-        return nil
-    }
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		log.Printf("Directory %s does not exist — skipping\n", dir)
+		return nil
+	}
 
-    // Cache interface lookup and gateway parsing
-    iface, err := netlink.LinkByName(ifaceName)
-    if err != nil {
-        if strings.Contains(err.Error(), "Link not found") {
-            log.Fatalf("\033[31mConfiguration error: interface '%s' does not exist. Check 'interface' or 'default_interface' in config.\033[0m\n", ifaceName)
-        }
-        return fmt.Errorf("error getting interface %s: %w", ifaceName, err)
-    }
-    ifaceIndex := iface.Attrs().Index
-    gwIP := net.ParseIP(gateway)
-    if gwIP == nil {
-        return fmt.Errorf("invalid gateway IP: %s", gateway)
-    }
+	// Cache interface lookup and gateway parsing
+	iface, err := netlink.LinkByName(ifaceName)
+	if err != nil {
+		if strings.Contains(err.Error(), "Link not found") {
+			log.Fatalf("\033[31mConfiguration error: interface '%s' does not exist. Check 'interface' or 'default_interface' in config.\033[0m\n", ifaceName)
+		}
+		return fmt.Errorf("error getting interface %s: %w", ifaceName, err)
+	}
+	ifaceIndex := iface.Attrs().Index
+	gwIP := net.ParseIP(gateway)
+	if gwIP == nil {
+		return fmt.Errorf("invalid gateway IP: %s", gateway)
+	}
 
-    var jsonFiles []string
+	var jsonFiles []string
 
-    err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-        if err != nil {
-            return err
-        }
-        if !info.IsDir() && filepath.Ext(path) == ".json" {
-            jsonFiles = append(jsonFiles, info.Name())
-        }
-        return nil
-    })
-    if err != nil {
-        return fmt.Errorf("error reading folder %s: %w", dir, err)
-    }
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && filepath.Ext(path) == ".json" {
+			jsonFiles = append(jsonFiles, info.Name())
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("error reading folder %s: %w", dir, err)
+	}
 
-    if len(jsonFiles) == 0 {
-        log.Printf("No route files found in %s — skipping\n", dir)
-        return nil
-    }
+	if len(jsonFiles) == 0 {
+		log.Printf("No route files found in %s — skipping\n", dir)
+		return nil
+	}
 
-    for _, fileName := range jsonFiles {
-        log.Println("Processing:", fileName)
-        data, err := os.ReadFile(filepath.Join(dir, fileName))
-        if err != nil {
-            log.Printf("\033[31mError reading file %s: %v\033[0m\n", fileName, err)
-            continue
-        }
+	for _, fileName := range jsonFiles {
+		log.Println("Processing:", fileName)
+		data, err := os.ReadFile(filepath.Join(dir, fileName))
+		if err != nil {
+			log.Printf("\033[31mError reading file %s: %v\033[0m\n", fileName, err)
+			continue
+		}
 
-        var destinations []string
-        if err := json.Unmarshal(data, &destinations); err != nil {
-            log.Printf("\033[31mError parsing JSON %s: %v\033[0m\n", fileName, err)
-            continue
-        }
+		var destinations []string
+		if err := json.Unmarshal(data, &destinations); err != nil {
+			log.Printf("\033[31mError parsing JSON %s: %v\033[0m\n", fileName, err)
+			continue
+		}
 
-        var wg sync.WaitGroup
-        sem := make(chan struct{}, goroutineCount)
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, goroutineCount)
 
-        for _, dest := range destinations {
-            wg.Add(1)
-            sem <- struct{}{}
-            go func(d string) {
-                defer wg.Done()
-                defer func() { <-sem }()
-                if err := addRoute(d, gwIP, ifaceIndex); err != nil {
-                    errType := classifyError(err)
-                    switch errType {
-                    case "file_exists":
-                        stats.AddAlreadyExist(fmt.Sprintf("%s via %s dev %s", d, gateway, ifaceName))
-                    case "no_such_device":
-                        log.Fatalf("\033[31mConfiguration error: interface '%s' does not exist. Check 'interface' or 'default_interface' in config.\033[0m\n", ifaceName)
-                    default:
-                        stats.AddError(errType)
-                        if debug {
-                            log.Printf("\033[31mError adding route for %s via %s dev %s: %v\033[0m\n", d, gateway, ifaceName, err)
-                        }
-                    }
-                } else {
-                    stats.AddSuccess()
-                }
-            }(dest)
-        }
+		for _, dest := range destinations {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(d string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				if err := addRoute(d, gwIP, ifaceIndex); err != nil {
+					errType := classifyError(err)
+					switch errType {
+					case "file_exists":
+						stats.AddAlreadyExist(fmt.Sprintf("%s via %s dev %s", d, gateway, ifaceName))
+					case "no_such_device":
+						log.Fatalf("\033[31mConfiguration error: interface '%s' does not exist. Check 'interface' or 'default_interface' in config.\033[0m\n", ifaceName)
+					default:
+						stats.AddError(errType)
+						if debug {
+							log.Printf("\033[31mError adding route for %s via %s dev %s: %v\033[0m\n", d, gateway, ifaceName, err)
+						}
+					}
+				} else {
+					stats.AddSuccess()
+				}
+			}(dest)
+		}
 
-        wg.Wait()
-    }
-    return nil
+		wg.Wait()
+	}
+	return nil
 }
 
 func main() {
-    config, err := readConfig("iproute.conf")
-    if err != nil {
-        log.Fatalf("\033[31mError reading configuration: %v\033[0m", err)
-    }
+	config, err := readConfig("iproute.conf")
+	if err != nil {
+		log.Fatalf("\033[31mError reading configuration: %v\033[0m", err)
+	}
+	// create tun interface from config
+	log.Println("create tun interface from config")
+	err = creatTunInterface(config.Interface)
+	if err != nil {
+		log.Fatalf("System error ioctl: %v", err)
+	}
+	//set tun interface ip
+	log.Println("set gateway ip to tun interface")
+	err = setIpTunInterface(config.Interface, config.Gateway)
+	if err != nil {
+		log.Fatalf("System error ioctl: %v", err)
+	}
 
-    stats := NewStats()
-    defer stats.Close()
+	stats := NewStats()
+	defer stats.Close()
 
-    // Graceful shutdown handler
-    sigChan := make(chan os.Signal, 1)
-    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-    go func() {
-        <-sigChan
-        log.Println("\nReceived interrupt signal, shutting down...")
-        stats.Close()
-        stats.PrintStats()
-        os.Exit(0)
-    }()
+	// Graceful shutdown handler
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		log.Println("\nReceived interrupt signal, shutting down...")
+		stats.Close()
+		stats.PrintStats()
+		os.Exit(0)
+	}()
 
-    if config.Interface != "" && config.Gateway != "" {
-        log.Println("Adding routes for interface:", config.Interface)
-        if err := addRoutesFromDir(mainRouteDir, config.Gateway, config.Interface, config.GoroutineCount, config.Debug, stats); err != nil {
-            log.Printf("\033[31mError adding routes: %v\033[0m\n", err)
-        }
-    }
+	if config.Interface != "" && config.Gateway != "" {
+		log.Println("Adding routes for interface:", config.Interface)
+		if err := addRoutesFromDir(mainRouteDir, config.Gateway, config.Interface, config.GoroutineCount, config.Debug, stats); err != nil {
+			log.Printf("\033[31mError adding routes: %v\033[0m\n", err)
+		}
+	}
 
-    if config.DefaultInterface != "" && config.DefaultGateway != "" {
-        log.Println("Adding routes for default interface:", config.DefaultInterface)
-        if err := addRoutesFromDir(defaultRouteDir, config.DefaultGateway, config.DefaultInterface, config.GoroutineCount, config.Debug, stats); err != nil {
-            log.Printf("\033[31mError adding default routes: %v\033[0m\n", err)
-        }
-    }
+	if config.DefaultInterface != "" && config.DefaultGateway != "" {
+		log.Println("Adding routes for default interface:", config.DefaultInterface)
+		if err := addRoutesFromDir(defaultRouteDir, config.DefaultGateway, config.DefaultInterface, config.GoroutineCount, config.Debug, stats); err != nil {
+			log.Printf("\033[31mError adding default routes: %v\033[0m\n", err)
+		}
+	}
 
-    stats.Close()
-    stats.PrintStats()
+	stats.Close()
+	stats.PrintStats()
 }
