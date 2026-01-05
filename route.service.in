@@ -4,7 +4,6 @@ After=multi-user.target
 
 [Service]
 Type=oneshot
-Environment=IPROUTE_GIT_DIR=@IPROUTE_GIT_DIR@
 WorkingDirectory=@IPROUTE_GIT_DIR@
 ExecStart=/usr/bin/srtunectl
 
