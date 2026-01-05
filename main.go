@@ -295,9 +295,8 @@ func createTunInterface(ifName string) error {
 
 	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), uintptr(TUNSETIFF), uintptr(unsafe.Pointer(&ifr)))
 	if errno != 0 {
-		if errno == syscall.EEXIST {
-			log.Println("Interface already exists")
-			return nil
+		if errno == syscall.EEXIST || errno == syscall.EBUSY {
+			fmt.Println("Interface already exists")
 		}
 		return errno
 	}
