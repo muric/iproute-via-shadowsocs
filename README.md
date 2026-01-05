@@ -2,42 +2,38 @@
 
 ## Table of Contents
 - Russian (Русский)
-  - Overview
-  - Features
-  - Requirements
-  - Installation
-  - Configuration
-  - Usage
-  - systemd Service
-  - Debugging
-  - Contributing
-  - License
+  - [Overview](#русский-overview)
+  - [Features](#возможности)
+  - [Requirements](#требования)
+  - [Installation](#установка)
+  - [Configuration](#конфигурация)
+  - [Usage](#использование)
+  - [systemd Service](#systemd-сервис)
+  - [Debugging](#отладка)
+  - [Contributing](#вклад)
+  - [License](#лицензия)
 - English
-  - Overview
-  - Features
-  - Requirements
-  - Installation
-  - Configuration
-  - Usage
-  - systemd Service
-  - Debugging
-  - Contributing
-  - License
+  - [Overview](#english-overview)
+  - [Features](#features)
+  - [Requirements](#requirements)
+  - [Installation](#installation)
+  - [Configuration](#configuration)
+  - [Usage](#usage)
+  - [systemd Service](#systemd-service)
+  - [Debugging](#debugging)
+  - [Contributing](#contributing)
+  - [License](#license-1)
 
 ---
 
 ## Русский
 
-# srtunectl
-
+### Overview
 srtunectl — лёгкая утилита для управления системными маршрутами (`ip route`) на основе конфигурационного файла. Предназначена для маршрутизации через туннельные интерфейсы (например, `tun` интерфейсы, используемые ss-tun или другими туннелями). Утилита добавляет и удаляет маршруты в соответствии с конфигом и может работать как демон systemd.
 
 Все JSON-файлы в каталоге `data` обрабатываются и добавляются как маршруты через указанный tun-интерфейс. Также можно задать принудительные маршруты через папку `default_route`.
 
----
-
-## Возможности
-
+### Возможности
 - Управление маршрутами через простой конфигурационный файл  
 - Автоматическая маршрутизация выбранных подсетей через tun-интерфейс  
 - Обработка JSON-файлов маршрутов из папки `data`  
@@ -45,18 +41,12 @@ srtunectl — лёгкая утилита для управления систе
 - Запуск вручную или как systemd-сервис  
 - Простая сборка и установка через `make`
 
----
-
-## Требования
-
+### Требования
 - Linux с установленными iproute2 (`ip` команда)  
 - Go toolchain (для сборки из исходников)  
 - Привилегии root для изменения системных маршрутов
 
----
-
-## Установка
-
+### Установка
 1. Скопируйте пример конфигурации:
 ```bash
 cp iproute.conf.example iproute.conf
@@ -76,10 +66,7 @@ sudo make install
 - Бинарник устанавливается в `/usr/bin/srtunectl`.  
 - Makefile генерирует systemd-unit `/etc/systemd/system/route.service` из шаблона `route.service.in` и вызывает `systemctl daemon-reload` и `systemctl enable route.service`.
 
----
-
-## Конфигурация
-
+### Конфигурация
 Файл примера: `iproute.conf.example`. В конфигурации обычно указываются:
 
 - Список сетей или подсетей для маршрутизации  
@@ -88,14 +75,12 @@ sudo make install
 - Опционально: адрес(а) дефолтного шлюза и интерфейс по умолчанию  
 - Пути к папкам `data` и `default_route` (если используются нестандартные)
 
-Формат маршрутов (пример в одной строке): `networks = [ "8.8.8.0/24", "1.1.1.0/24" ]`
+Формат маршрутов (пример в одной строке):  
+`networks = [ "8.8.8.0/24", "1.1.1.0/24" ]`
 
 Описание: это пример того, в каком формате программа srtunectl ожидает список маршрутов (поле `networks`). srtunectl парсит записи в таком виде и добавляет соответствующие подсети в таблицу маршрутизации через настроенный tun-интерфейс.
 
----
-
-## Использование
-
+### Использование
 Запуск вручную:
 ```bash
 sudo srtunectl
@@ -116,10 +101,7 @@ sudo systemctl status route.service
 sudo journalctl -u route.service -f
 ```
 
----
-
-## Отладка
-
+### Отладка
 - Проверьте, что tun-интерфейс создан и доступен:
 ```bash
 ip a
@@ -135,32 +117,22 @@ sudo journalctl -u route.service
 sudo srtunectl
 ```
 
----
-
-## Вклад
-
+### Вклад
 PR, репорты об ошибках и предложения по улучшению приветствуются. Пожалуйста, открывайте issues с описанием проблемы и шагами для воспроизведения.
 
----
-
-## Лицензия
-
-Проверьте файл LICENSE в репозитории (если присутствует) для информации о лицензировании проекта.
+### Лицензия
+Файл LICENSE в корне репозитория содержит условия лицензии проекта.
 
 ---
 
 ## English
 
-# srtunectl
-
+### Overview
 srtunectl is a lightweight utility to manage system routes (`ip route`) based on a configuration file. It is intended for routing via tunnel interfaces (for example, `tun` interfaces used by ss-tun or other tunnels). The tool adds and removes routes according to the configuration and can run as a systemd service.
 
 All JSON files located in the `data` folder are parsed and added as routes through the specified tun device. You can also define forced routes via the `default_route` folder.
 
----
-
-## Features
-
+### Features
 - Manage routes via a simple configuration file  
 - Automatically route selected subnets through a tun interface  
 - Process JSON route files from the `data` folder  
@@ -168,18 +140,12 @@ All JSON files located in the `data` folder are parsed and added as routes throu
 - Run manually or as a systemd service  
 - Easy build and installation via `make`
 
----
-
-## Requirements
-
+### Requirements
 - Linux with iproute2 (`ip` command)  
 - Go toolchain (to build from source)  
 - Root privileges to modify system routes
 
----
-
-## Installation
-
+### Installation
 1. Copy the example configuration:
 ```bash
 cp iproute.conf.example iproute.conf
@@ -199,10 +165,7 @@ Notes regarding installation (matches Makefile in repository):
 - The binary is installed to `/usr/bin/srtunectl`.  
 - The Makefile generates the systemd unit `/etc/systemd/system/route.service` from the template `route.service.in` and runs `systemctl daemon-reload` and `systemctl enable route.service`.
 
----
-
-## Configuration
-
+### Configuration
 Example config file: `iproute.conf.example`. Typically the configuration includes:
 
 - List of networks or subnets to route  
@@ -211,14 +174,12 @@ Example config file: `iproute.conf.example`. Typically the configuration include
 - Optional: default gateway(s) and default interface  
 - Paths to `data` and `default_route` folders (if using non-default locations)
 
-Routes format (example in one line): `networks = [ "8.8.8.0/24", "1.1.1.0/24" ]`
+Routes format (example in one line):  
+`networks = [ "8.8.8.0/24", "1.1.1.0/24" ]`
 
 Description: this is an example of the format in which srtunectl expects the list of routes (the `networks` field). srtunectl parses entries in this form and installs the corresponding subnets into the routing table via the configured tun interface.
 
----
-
-## Usage
-
+### Usage
 Run manually:
 ```bash
 sudo srtunectl
@@ -239,10 +200,7 @@ View service logs:
 sudo journalctl -u route.service -f
 ```
 
----
-
-## Debugging
-
+### Debugging
 - Ensure the tun interface exists:
 ```bash
 ip a
@@ -258,14 +216,8 @@ sudo journalctl -u route.service
 sudo srtunectl
 ```
 
----
-
-## Contributing
-
+### Contributing
 Pull requests, bug reports, and feature suggestions are welcome. Please open issues with a description and steps to reproduce.
 
----
-
-## License
-
-See the LICENSE file in the repository (if present) for licensing information.
+### License
+See the LICENSE file in the repository for licensing information.
