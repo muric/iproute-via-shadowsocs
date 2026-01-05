@@ -10,7 +10,7 @@ all: build
 # Build target
 build:
 	@echo "Building the application..."
-	go build
+	go build -o ./output/${APP_NAME} main.go
 # Clean target
 clean:
 	@echo "Cleaning up..."
@@ -18,7 +18,7 @@ clean:
 	rm -rf /usr/bin/${APP_NAME}
 
 install:
-	install -m 0755 $(APP_NAME) /usr/bin/$(APP_NAME)
+	install -m 0755 ./output/${APP_NAME} /usr/bin/$(APP_NAME)
 
 	install -d $(SYSTEMD_DIR)
 	sed \
