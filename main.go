@@ -422,6 +422,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("\033[31mError reading configuration: %v\033[0m", err)
 	}
+	// create tun interface from config
+	log.Println("\ncreate tun interface from config")
+	err = creatTunInterface(config.Interface)
+	if err != nil {
+		log.Fatalf("System error ioctl: %v", err)
+	}
+	//set tun interface ip
+	log.Println("\nset gateway ip to tun interface")
+	err = setIpTunInterface(config.Interface, config.Gateway)
+	if err != nil {
+		log.Fatalf("System error ioctl: %v", err)
+	}
 
 	stats := NewStats()
 	defer stats.Close()
@@ -436,16 +448,6 @@ func main() {
 		stats.PrintStats()
 		os.Exit(0)
 	}()
-	// create tun interface from config
-	err = creatTunInterface(config.Interface)
-	if err != nil {
-		log.Fatalf("System error ioctl: %v", err)
-	}
-	//set tun interface ip
-	err = setIpTunInterface(config.Interface, config.Gateway)
-	if err != nil {
-		log.Fatalf("System error ioctl: %v", err)
-	}
 
 	if config.Interface != "" && config.Gateway != "" {
 		log.Println("Adding routes for interface:", config.Interface)
