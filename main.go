@@ -179,8 +179,8 @@ func (s *Stats) PrintStats() {
 	dropped := atomic.LoadInt64(&s.DupDropped)
 
 	var sb strings.Builder
-	sb.WriteString("\n========== Statistics ==========
-")
+	// FIXED: use single-line string literal
+	sb.WriteString("\n========== Statistics ==========" + "\n")
 	fmt.Fprintf(&sb, "Successfully added: %d\n", success)
 	fmt.Fprintf(&sb, "Already existed (skipped): %d\n", alreadyExist)
 
