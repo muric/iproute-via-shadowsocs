@@ -461,7 +461,7 @@ func main() {
 	}
 	// create tun interface from config
 	log.Println("create tun interface from config")
-	err = creatTunInterface(config.Interface)
+	err = createTunInterface(config.Interface)
 	if err != nil {
 		log.Fatalf("System error ioctl: %v", err)
 	}
