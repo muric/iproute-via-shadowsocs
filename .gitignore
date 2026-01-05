@@ -4,3 +4,5 @@ iproute.conf
 # Ignore binary
 iproute
 srtunectl
+# Ignore output directory
+output/
