@@ -1,27 +1,180 @@
 # srtunectl
 
-**srtunectl** is a lightweight utility for managing system routes (`ip route`) based on a configuration file. It is designed for setups using `tun` interfaces, such as Shadowsocks `ss-tun` or other VPN/proxy tunneling tools.
+## Table of Contents
+- Russian (Русский)
+  - Overview
+  - Features
+  - Requirements
+  - Installation
+  - Configuration
+  - Usage
+  - systemd Service
+  - Debugging
+  - Contributing
+  - License
+- English
+  - Overview
+  - Features
+  - Requirements
+  - Installation
+  - Configuration
+  - Usage
+  - systemd Service
+  - Debugging
+  - Contributing
+  - License
 
-This tool adds or removes routes dynamically according to your configuration and can run as a persistent systemd service.
+---
 
-All JSON files located in the `data` folder will be processed and attempted to be added as routes through the specified tun device. Additionally, any routes defined in the `default_route` folder will be treated as forced routes for another interface, for example `eth0`.
+## Русский
+
+# srtunectl
+
+srtunectl — лёгкая утилита для управления системными маршрутами (`ip route`) на основе конфигурационного файла. Предназначена для маршрутизации через туннельные интерфейсы (например, `tun` интерфейсы, используемые ss-tun или другими туннелями). Утилита добавляет и удаляет маршруты в соответствии с конфигом и может работать как демон systemd.
+
+Все JSON-файлы в каталоге `data` обрабатываются и добавляются как маршруты через указанный tun-интерфейс. Также можно задать принудительные маршруты через папку `default_route`.
+
+---
+
+## Возможности
+
+- Управление маршрутами через простой конфигурационный файл  
+- Автоматическая маршрутизация выбранных подсетей через tun-интерфейс  
+- Обработка JSON-файлов маршрутов из папки `data`  
+- Принудительная установка отдельных маршрутов через `default_route`  
+- Запуск вручную или как systemd-сервис  
+- Простая сборка и установка через `make`
+
+---
+
+## Требования
+
+- Linux с установленными iproute2 (`ip` команда)  
+- Go toolchain (для сборки из исходников)  
+- Привилегии root для изменения системных маршрутов
+
+---
+
+## Установка
+
+1. Скопируйте пример конфигурации:
+```bash
+cp iproute.conf.example iproute.conf
+```
+
+2. Соберите бинарник:
+```bash
+make
+```
+
+3. Установите и зарегистрируйте systemd-сервис (Makefile выполняет установку и включение сервиса):
+```bash
+sudo make install
+```
+
+Примечания по установке (соответствует Makefile в репозитории):
+- Бинарник устанавливается в `/usr/bin/srtunectl`.  
+- Makefile генерирует systemd-unit `/etc/systemd/system/route.service` из шаблона `route.service.in` и вызывает `systemctl daemon-reload` и `systemctl enable route.service`.
+
+---
+
+## Конфигурация
+
+Файл примера: `iproute.conf.example`. В конфигурации обычно указываются:
+
+- Список сетей или подсетей для маршрутизации  
+- Имя tun-интерфейса (например, `tun0`)  
+- Адрес шлюза (gateway) для туннеля  
+- Опционально: адрес(а) дефолтного шлюза и интерфейс по умолчанию  
+- Пути к папкам `data` и `default_route` (если используются нестандартные)
+
+Формат маршрутов (пример в одной строке): `networks = [ "8.8.8.0/24", "1.1.1.0/24" ]`
+
+Описание: это пример того, в каком формате программа srtunectl ожидает список маршрутов (поле `networks`). srtunectl парсит записи в таком виде и добавляет соответствующие подсети в таблицу маршрутизации через настроенный tun-интерфейс.
+
+---
+
+## Использование
+
+Запуск вручную:
+```bash
+sudo srtunectl
+```
+
+Проверка текущих маршрутов:
+```bash
+ip route
+```
+
+Проверить статус systemd-сервиса (если вы устанавливали через `make install`):
+```bash
+sudo systemctl status route.service
+```
+
+Просмотр логов сервиса:
+```bash
+sudo journalctl -u route.service -f
+```
+
+---
+
+## Отладка
+
+- Проверьте, что tun-интерфейс создан и доступен:
+```bash
+ip a
+```
+- Убедитесь, что в `iproute.conf` корректно указаны gateway, имя интерфейса и подсети.  
+- Проверьте валидность JSON-файлов в папке `data`.  
+- Просмотрите логи systemd при запуске как службы:
+```bash
+sudo journalctl -u route.service
+```
+- Запускайте утилиту вручную под sudo, чтобы увидеть вывод в консоли:
+```bash
+sudo srtunectl
+```
+
+---
+
+## Вклад
+
+PR, репорты об ошибках и предложения по улучшению приветствуются. Пожалуйста, открывайте issues с описанием проблемы и шагами для воспроизведения.
+
+---
+
+## Лицензия
+
+Проверьте файл LICENSE в репозитории (если присутствует) для информации о лицензировании проекта.
+
+---
+
+## English
+
+# srtunectl
+
+srtunectl is a lightweight utility to manage system routes (`ip route`) based on a configuration file. It is intended for routing via tunnel interfaces (for example, `tun` interfaces used by ss-tun or other tunnels). The tool adds and removes routes according to the configuration and can run as a systemd service.
+
+All JSON files located in the `data` folder are parsed and added as routes through the specified tun device. You can also define forced routes via the `default_route` folder.
 
 ---
 
 ## Features
-- Manage routes via a simple configuration file
-- Automatically route selected subnets through a tun interface
-- Process JSON route files from `data` folder
-- Force default routes via `default_route` folder
-- Can be run manually or as a systemd service
+
+- Manage routes via a simple configuration file  
+- Automatically route selected subnets through a tun interface  
+- Process JSON route files from the `data` folder  
+- Force specific routes via `default_route`  
+- Run manually or as a systemd service  
 - Easy build and installation via `make`
 
 ---
 
 ## Requirements
-- Linux with `iproute2`
-- Go toolchain (for building from source)
-- Root privileges for modifying system routes
+
+- Linux with iproute2 (`ip` command)  
+- Go toolchain (to build from source)  
+- Root privileges to modify system routes
 
 ---
 
@@ -37,80 +190,82 @@ cp iproute.conf.example iproute.conf
 make
 ```
 
-3. Install:
+3. Install and register the systemd service (Makefile performs service install and enable):
 ```bash
 sudo make install
 ```
 
-After installation, the binary will be available as:
-```
-/usr/local/bin/srtunectl
-```
+Notes regarding installation (matches Makefile in repository):
+- The binary is installed to `/usr/bin/srtunectl`.  
+- The Makefile generates the systemd unit `/etc/systemd/system/route.service` from the template `route.service.in` and runs `systemctl daemon-reload` and `systemctl enable route.service`.
 
 ---
 
 ## Configuration
 
-The configuration file format is illustrated in `iproute.conf.example`.
-Your configuration will typically include:
+Example config file: `iproute.conf.example`. Typically the configuration includes:
 
-- List of networks to route
-- Tun interface name (e.g., `tun0`)
-- Gateway address
-- default gateway address to set default route via them
-- default interface name
+- List of networks or subnets to route  
+- Tun interface name (e.g., `tun0`)  
+- Gateway address for the tunnel  
+- Optional: default gateway(s) and default interface  
+- Paths to `data` and `default_route` folders (if using non-default locations)
 
-Additionally:
-- JSON files in the `data` folder will be parsed and added as routes through the tun device.
-- Routes in the `default_route` folder will be processed as forced routes through other interfaces (e.g., `eth0`).
+Routes format (example in one line): `networks = [ "8.8.8.0/24", "1.1.1.0/24" ]`
 
-You may create or edit `iproute.conf` and manage JSON route files to match your routing needs.
+Description: this is an example of the format in which srtunectl expects the list of routes (the `networks` field). srtunectl parses entries in this form and installs the corresponding subnets into the routing table via the configured tun interface.
 
 ---
 
 ## Usage
 
-### Manual run
+Run manually:
 ```bash
 sudo srtunectl
 ```
 
-### Verify routes
+Check routes:
 ```bash
 ip route
 ```
 
----
-
-## Systemd Service
-
-The repository includes a sample systemd unit file `route.service`. To use it:
-
+Check systemd service status (if installed via `make install`):
 ```bash
-sudo cp route.service /etc/systemd/system/srtunectl.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now srtunectl.service
+sudo systemctl status route.service
 ```
 
 View service logs:
 ```bash
-sudo journalctl -u srtunectl.service -f
+sudo journalctl -u route.service -f
 ```
 
 ---
 
 ## Debugging
+
 - Ensure the tun interface exists:
-  ```bash
-  ip a
-  ```
-- Verify gateway, interface name, and subnets in `iproute.conf`
-- Check systemd logs when running as a service
-- Check that JSON files in `data` are valid and properly formatted
+```bash
+ip a
+```
+- Verify gateway, interface name, and subnets in `iproute.conf`.  
+- Validate JSON files in the `data` folder.  
+- Check systemd logs when running as a service:
+```bash
+sudo journalctl -u route.service
+```
+- Run the tool manually under sudo to see console output:
+```bash
+sudo srtunectl
+```
 
 ---
 
 ## Contributing
-Pull requests, bug reports, and feature suggestions are welcome.
+
+Pull requests, bug reports, and feature suggestions are welcome. Please open issues with a description and steps to reproduce.
 
 ---
+
+## License
+
+See the LICENSE file in the repository (if present) for licensing information.
