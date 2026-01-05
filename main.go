@@ -25,6 +25,7 @@ const (
 	TUNSETIFF                = 0x400454ca
 	IFF_TUN                  = 0x0001
 	IFF_NO_PI                = 0x1000
+	TUNSETPERSIST            = 0x400454cb
 	duplicatesFlushThreshold = 10000
 	duplicatesChanBuffer     = 50000
 	defaultGoroutineCount    = 100
@@ -270,7 +271,6 @@ func creatTunInterface(ifName string) error {
 		return err
 	}
 
-	defer file.Close()
 	ifr := ifreq{
 		ifrName:  [16]byte{},
 		ifrFlags: IFF_TUN | IFF_NO_PI,
@@ -282,6 +282,10 @@ func creatTunInterface(ifName string) error {
 		fmt.Println("Interface exist")
 	} else {
 		return err
+	}
+	_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), TUNSETPERSIST, 1)
+	if errno != 0 {
+		return errno
 	}
 
 	return nil
@@ -436,7 +440,7 @@ func main() {
 		log.Fatalf("System error ioctl: %v", err)
 	}
 	//set tun interface ip
-	log.Println("\nset gateway ip to tun interface")
+	log.Println("set gateway ip to tun interface")
 	err = setIpTunInterface(config.Interface, config.Gateway)
 	if err != nil {
 		log.Fatalf("System error ioctl: %v", err)
