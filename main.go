@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -297,11 +298,17 @@ func setIpTunInterface(ifName, gateway string) error {
 		log.Fatalf("Failed to parse ip: %v", err)
 	}
 
-	if err := netlink.AddrAdd(link, addr); err != nil {
-		log.Fatalf("failed to set ip : %v", err)
+	err = netlink.AddrAdd(link, addr)
+	if err != nil {
+		if errors.Is(err, syscall.EEXIST) {
+			log.Printf("IP %s are allready setuped on interface %s ", addr.IP, link.Attrs().Name)
+		} else {
+			log.Fatalf("failed to set up ip: %v", err)
+		}
 	}
 
-	if err := netlink.LinkSetUp(link); err != nil {
+	err = netlink.LinkSetUp(link)
+	if err != nil {
 		log.Fatalf("Failed to up interface: %v", err)
 	}
 	return err
@@ -423,7 +430,7 @@ func main() {
 		log.Fatalf("\033[31mError reading configuration: %v\033[0m", err)
 	}
 	// create tun interface from config
-	log.Println("\ncreate tun interface from config")
+	log.Println("create tun interface from config")
 	err = creatTunInterface(config.Interface)
 	if err != nil {
 		log.Fatalf("System error ioctl: %v", err)
