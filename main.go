@@ -179,8 +179,7 @@ func (s *Stats) PrintStats() {
 	dropped := atomic.LoadInt64(&s.DupDropped)
 
 	var sb strings.Builder
-	// FIXED: use single-line string literal
-	sb.WriteString("\n========== Statistics ==========" + "\n")
+	sb.WriteString("\n========== Statistics ==========\n")
 	fmt.Fprintf(&sb, "Successfully added: %d\n", success)
 	fmt.Fprintf(&sb, "Already existed (skipped): %d\n", alreadyExist)
 
@@ -437,7 +436,7 @@ func addRoutesFromDir(dir, gateway, ifaceName string, goroutineCount int, debug 
 	iface, err := netlink.LinkByName(ifaceName)
 	if err != nil {
 		if strings.Contains(err.Error(), "Link not found") {
-			return fmt.Errorf("configuration error: interface '%s' does not exist. Check 'interface' or 'default_interface' in config", ifaceName)
+			log.Fatalf("\033[31mConfiguration error: interface '%s' does not exist. Check 'interface' or 'default_interface' in config.\033[0m\n", ifaceName)
 		}
 		return fmt.Errorf("error getting interface %s: %w", ifaceName, err)
 	}
@@ -503,9 +502,7 @@ func addRoutesFromDir(dir, gateway, ifaceName string, goroutineCount int, debug 
 					case "file_exists":
 						stats.AddAlreadyExist(fmt.Sprintf("%s via %s dev %s", d, gateway, ifaceName))
 					case "no_such_device":
-						// avoid fatal from worker goroutine; record and log
-						stats.AddError("no_such_device")
-						log.Printf("\033[31mInterface '%s' not found when adding route for %s. Check configuration.\033[0m\n", ifaceName, d)
+						log.Fatalf("\033[31mConfiguration error: interface '%s' does not exist. Check 'interface' or 'default_interface' in config.\033[0m\n", ifaceName)
 					default:
 						stats.AddError(errType)
 						if debug {
